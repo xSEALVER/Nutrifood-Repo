@@ -3,13 +3,13 @@ import React from 'react';
 // import HeroComp from '../Components/HeroComp.jsx';
 // import Footer from '../Components/Footer';
 import SignInComp from '../Components/SignInComp.jsx';
-import NavbarPost from '../Components/NavbarPost.jsx';
+import Navbar from '../Components/Navbar.jsx';
 
 
 function SignInPage() {
   return (
     <>
-      <NavbarPost />
+      <Navbar />
       <SignInComp />
     </>
   )

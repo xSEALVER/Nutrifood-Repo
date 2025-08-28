@@ -26,16 +26,33 @@ const SignInComp = () => {
       console.log('Signin successful:', response.data);
 
       const userData = response.data;
+      
+      // Store complete user data in localStorage (consistent with SignUp component)
+      const userDataToStore = {
+        id_clients: userData.id_clients,
+        name: userData.name,
+        email: userData.email,
+        role: userData.role
+      };
+      
+      // Store as 'user' object to match what other components expect
+      localStorage.setItem('user', JSON.stringify(userDataToStore));
+      
+      // Also store just the ID for backward compatibility (if needed elsewhere)
       localStorage.setItem('id_clients', userData.id_clients);
+
+      console.log('Stored user data:', userDataToStore);
 
       navigate('/journal', {
         state: {
           name: userData.name,
-          email: userData.email
+          email: userData.email,
+          userId: userData.id_clients
         }
       });
     } catch (error) {
       console.error('Error during signin:', error.response?.data || error);
+      alert('Login failed. Please check your credentials and try again.');
     }
   };
 
@@ -111,7 +128,7 @@ const SignInComp = () => {
 
               {/* Signup link */}
               <p className="text-sm font-light text-gray-500 dark:text-gray-400">
-                Don’t have an account?{' '}
+                Don't have an account?{' '}
                 <a href="/signup" className="font-medium text-primary-600 hover:underline dark:text-primary-500">
                   Sign up here
                 </a>

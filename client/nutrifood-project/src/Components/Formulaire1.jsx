@@ -1,6 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom"; // Added useNavigate
 
 const Formulaire1 = () => {
+  const location = useLocation();
+  const navigate = useNavigate(); // Added this hook
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState({
     gender: "",
@@ -10,7 +13,49 @@ const Formulaire1 = () => {
     objective: "",
     exercise: "",
   });
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiResponse, setApiResponse] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
 
+  // Fetch user info from navigation state or localStorage
+  useEffect(() => {
+    let userData = null;
+    if (location.state) {
+      userData = {
+        id_clients: location.state.userId,
+        name: location.state.name,
+        email: location.state.email,
+      };
+      console.log("Got user data from navigation:", userData);
+    } else {
+      try {
+        const storedUser = localStorage.getItem("user");
+        if (storedUser) {
+          userData = JSON.parse(storedUser);
+          console.log("Got user data from localStorage:", userData);
+        }
+      } catch (error) {
+        console.error("Error parsing user data from localStorage:", error);
+      }
+    }
+    if (userData && userData.id_clients) {
+      setUserInfo(userData);
+    } else {
+      console.error("No user data found. User might not be logged in.");
+    }
+  }, [location.state]);
+
+  // Function to handle navigation to journal
+  const goToJournal = () => {
+    navigate("/journal", {
+      state: {
+        userInfo: userInfo,
+        nutritionalNeeds: apiResponse?.nutritional_needs,
+      },
+    });
+  };
+
+  // Define all steps
   const steps = [
     {
       id: 1,
@@ -19,8 +64,8 @@ const Formulaire1 = () => {
       hasBackButton: false,
       content: {
         image: "",
-        title: "Congratulations on taking the first step!",
-        description: "",
+        title: "",
+        description: "Congratulations on taking the first step!",
       },
     },
     {
@@ -30,8 +75,8 @@ const Formulaire1 = () => {
       hasBackButton: true,
       content: {
         image: "",
-        title: "You are unique, just like our program",
-        description: "",
+        description:
+          "In nutrition, finding what works best for you makes all the difference.",
       },
     },
     {
@@ -41,8 +86,8 @@ const Formulaire1 = () => {
       hasBackButton: true,
       content: {
         image: "",
-        title: "Let's find your personalized program",
-        description: "Find what works best for you to achieve your goal.",
+        title: "",
+        description: "You are unique, just like our program",
       },
     },
     {
@@ -114,29 +159,114 @@ const Formulaire1 = () => {
     {
       id: 10,
       bgColor: "bg-violet-300",
-      hasNextButton: true,
+      hasNextButton: true, // Changed to true so we can show the Next button
       hasBackButton: true,
       isResultCard: true,
       content: {
         image: "",
         title: "We found your personalized program",
-        subtitle: "Reach 60 kg by the end of June",
       },
     },
   ];
 
-  const nextStep = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(currentStep + 1);
+  // Save profile data to the backend
+  const saveProfile = async () => {
+    setIsLoading(true);
+    try {
+      if (!userInfo || !userInfo.id_clients) {
+        alert("User information not found. Please log in again.");
+        setIsLoading(false);
+        return false;
+      }
+
+      const profileData = {
+        utilisateur_id: userInfo.id_clients,
+        sexe: formData.gender,
+        age: formData.age,
+        poids: formData.weight,
+        taille: formData.height,
+        niveau_activite: formData.exercise,
+        objectif: formData.objective,
+      };
+
+      console.log("Sending profile data:", profileData);
+
+      const response = await fetch("http://localhost:8081/save-profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(profileData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(
+          `HTTP error! status: ${response.status}, message: ${
+            errorData.error || "Unknown error"
+          }`
+        );
+      }
+
+      const result = await response.json();
+      console.log("Profile saved successfully:", result);
+
+      setApiResponse(result);
+      alert("Profile saved successfully!");
+      return true;
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      alert(`Error saving profile: ${error.message}. Please try again.`);
+      return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // Move to the next step
+  const nextStep = async () => {
+    // If we're on the result card (step 9, index 9), go to journal
+    if (currentStep === 9) {
+      goToJournal();
+      return;
+    }
+
+    if (currentStep >= steps.length - 1) {
+      return;
+    }
+
+    if (currentStep === 8) {
+      if (
+        !formData.gender ||
+        !formData.age ||
+        !formData.height ||
+        !formData.weight ||
+        !formData.objective ||
+        !formData.exercise
+      ) {
+        alert("Please fill in all fields before submitting.");
+        return;
+      }
+
+      const success = await saveProfile();
+      if (success && currentStep < steps.length - 1) {
+        setCurrentStep(currentStep + 1);
+      }
+    } else {
+      if (currentStep < steps.length - 1) {
+        setCurrentStep(currentStep + 1);
+      }
+    }
+  };
+
+  // Move to the previous step
   const prevStep = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
   };
 
+  // Handle input changes
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({
       ...prev,
@@ -144,12 +274,18 @@ const Formulaire1 = () => {
     }));
   };
 
+  // Get current step data
   const currentStepData = steps[currentStep];
+  if (!currentStepData) {
+    return <div>Loading...</div>;
+  }
+
   const showStackedForm = currentStep >= 3 && currentStep <= 8;
   const visibleFormSteps = showStackedForm
     ? steps.slice(3, currentStep + 1).filter((step) => step.isForm)
     : [];
 
+  // Render form fields
   const renderFormField = (step, isActive = false) => {
     const fieldType = step.content.fieldType;
 
@@ -296,9 +432,10 @@ const Formulaire1 = () => {
     }
   };
 
+  // Render the component
   return (
-    <div className="w-full min-h-screen bg-gray-200 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="w-full min-h-screen bg-gray-200 flex items-center justify-center p-8">
+      <div className="w-full max-w-xl">
         <h1 className="text-3xl font-bold text-center text-gray-900 mb-8">
           Nutrifood
         </h1>
@@ -307,22 +444,24 @@ const Formulaire1 = () => {
           className={`${
             currentStepData.bgColor
           } rounded-3xl p-8 shadow-lg relative ${
-            showStackedForm ? "min-h-[600px]" : "min-h-[500px]"
+            showStackedForm ? "min-h-[500px]" : "min-h-[400px]"
           } flex flex-col items-center justify-between`}
         >
-          <div className="absolute top-1/2 left-4 transform -translate-y-1/2">
+          {/* Back button */}
+          <div className="absolute top-1/2 left-1 transform -translate-y-1/2 z-10">
             {currentStepData.hasBackButton && currentStep > 0 && (
               <button
                 onClick={prevStep}
-                className={`w-8 h-8 rounded-full flex items-center justify-center hover:bg-opacity-30 transition-all ${
+                className={`w-10 h-10 rounded-full align-middle hover:bg-opacity-30 transition-all ${
                   showStackedForm
                     ? "bg-gray-200 hover:bg-gray-300"
-                    : "bg-white bg-opacity-20"
+                    : "bg-opacity-20"
                 }`}
+                disabled={isLoading}
               >
                 <span
-                  className={`text-xl font-bold ${
-                    showStackedForm ? "text-gray-700" : "text-white"
+                  className={`text-3xl font-black ${
+                    showStackedForm ? "text-black" : "text-black"
                   }`}
                 >
                   ←
@@ -331,19 +470,21 @@ const Formulaire1 = () => {
             )}
           </div>
 
-          <div className="absolute top-1/2 right-4 transform -translate-y-1/2">
+          {/* Next button */}
+          <div className="absolute top-1/2 right-1 transform -translate-y-1/2 z-10">
             {currentStep < steps.length - 1 && (
               <button
                 onClick={nextStep}
-                className={`w-8 h-8 rounded-full flex items-center justify-center hover:bg-opacity-30 transition-all ${
+                className={`w-10 h-10 rounded-full items-center hover:bg-opacity-30 transition-all ${
                   showStackedForm
                     ? "bg-gray-200 hover:bg-gray-300"
-                    : "bg-white bg-opacity-20"
+                    : "bg-opacity-20"
                 }`}
+                disabled={isLoading}
               >
                 <span
-                  className={`text-xl font-bold ${
-                    showStackedForm ? "text-gray-700" : "text-white"
+                  className={`text-3xl font-black ${
+                    showStackedForm ? "text-black" : "text-black"
                   }`}
                 >
                   →
@@ -352,7 +493,7 @@ const Formulaire1 = () => {
             )}
           </div>
 
-          {/* Intro slides (non-stacked) */}
+          {/* Content */}
           {!showStackedForm ? (
             <div className="flex flex-col items-center justify-center flex-1 text-center">
               <div className="w-48 h-48 bg-white rounded-2xl mb-6 flex items-center justify-center shadow-md">
@@ -382,74 +523,96 @@ const Formulaire1 = () => {
               )}
             </div>
           ) : currentStepData.isResultCard ? (
-            // Results card layout
             <div className="flex flex-col items-center justify-center flex-1 text-center px-4">
-              {/* Main title */}
               <h2 className="text-lg font-semibold text-gray-800 mb-6 max-w-xs">
                 {currentStepData.content.title}
               </h2>
-
-              {/* Results card */}
               <div className="bg-white rounded-2xl p-6 shadow-md mb-6 w-full max-w-xs relative">
-                {/* Subtitle */}
-                <p className="text-sm font-medium text-gray-800 mb-4">
-                  {currentStepData.content.subtitle}
-                </p>
-
-                {/* Image placeholder */}
-                <div className="w-full h-40 bg-gray-100 rounded-xl mb-4 flex items-center justify-center border-2 border-dashed border-gray-300">
+                {apiResponse?.nutritional_needs ? (
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-gray-800 mb-4">
+                      Your Daily Nutritional Needs:
+                    </p>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>Calories:</span>
+                        <span className="font-semibold">
+                          {apiResponse.nutritional_needs.calories}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Protein:</span>
+                        <span className="font-semibold">
+                          {apiResponse.nutritional_needs.proteins}g
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Carbs:</span>
+                        <span className="font-semibold">
+                          {apiResponse.nutritional_needs.carbs}g
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Fats:</span>
+                        <span className="font-semibold">
+                          {apiResponse.nutritional_needs.fats}g
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                   <div className="text-center">
                     <div className="text-gray-400 text-4xl mb-2">🍽️</div>
-                    <p className="text-gray-500 text-sm">Food Image Placeholder</p>
+                    <p className="text-gray-500 text-sm">
+                      Food Image Placeholder
+                    </p>
                   </div>
-                </div>
-
-                {/* Arrow pointing right */}
-                <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                  <div className="w-8 h-8 flex items-center justify-center">
-                    <span className="text-gray-600 text-xl font-bold">→</span>
-                  </div>
-                </div>
+                )}
               </div>
-
-              {/* Get Started Button */}
-              <button
-                onClick={nextStep}
-                className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-4 rounded-xl transition-colors duration-200 max-w-xs"
-              >
-                Get Started
-              </button>
             </div>
           ) : (
-            // Stacked form steps
-            <div className="flex flex-col w-full flex-1 overflow-y-auto">
+            <div className="flex flex-col w-full flex-1 overflow-y-auto px-4">
               <div className="space-y-4 mb-6">
-                {currentStepData.id === 8 || currentStepData.id === 9 ? (
-                  // Show only current step for objective and exercise (full screen)
-                  renderFormField(currentStepData, true)
-                ) : (
-                  // Show stacked form for other steps
-                  visibleFormSteps.map((step, index) => (
-                    <div key={step.id}>
-                      {renderFormField(step, index === visibleFormSteps.length - 1)}
-                    </div>
-                  ))
-                )}
+                {currentStepData.id === 8 || currentStepData.id === 9
+                  ? renderFormField(currentStepData, true)
+                  : visibleFormSteps.map((step, index) => (
+                      <div key={step.id}>
+                        {renderFormField(
+                          step,
+                          index === visibleFormSteps.length - 1
+                        )}
+                      </div>
+                    ))}
               </div>
             </div>
           )}
 
+          {/* Bottom button */}
           <div className="w-full">
-            {currentStepData.hasNextButton && !currentStepData.isResultCard && (
+            {currentStepData.hasNextButton && (
               <button
                 onClick={nextStep}
-                className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 rounded-xl transition-colors duration-200 mb-4"
+                disabled={isLoading}
+                className={`w-full font-semibold py-3 rounded-xl transition-colors duration-200 mb-4 ${
+                  isLoading
+                    ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                    : currentStepData.isResultCard 
+                    ? "bg-blue-500 hover:bg-blue-600 text-white" 
+                    : "bg-green-500 hover:bg-green-600 text-white"
+                }`}
               >
-                {currentStep === steps.length - 1 ? "Start" : "Next"}
+                {isLoading
+                  ? "Saving..."
+                  : currentStepData.isResultCard
+                  ? "Next"
+                  : currentStep === steps.length - 1
+                  ? "Start"
+                  : "Next"}
               </button>
             )}
           </div>
 
+          {/* Step indicators */}
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
             {steps.map((_, index) => (
               <div
